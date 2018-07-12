@@ -31,6 +31,11 @@ classdef logging < handle
        logging.logging.INFO,     logging.logging.WARNING, logging.logging.ERROR, ...
        logging.logging.CRITICAL, logging.logging.OFF}, ...
       {'ALL', 'TRACE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'OFF'});
+    
+    log_styles = containers.Map(...
+        {'caller', 'timestamp', 'level', 'message'}, ...
+        {'%-s', '%-23s', '%-8s', '%s'});
+
   end
   
   properties (SetAccess=immutable)
@@ -41,7 +46,7 @@ classdef logging < handle
   properties (SetAccess=protected)
     name;
     fullpath = 'logging.log';  % Default log file
-    logfmt = '%-s %-23s %-8s %s\n';
+%     logfmt = '%-s %-23s %-8s %s\n';
     logfid = -1;
     logcolors = logging.logging.colors_terminal;
     using_terminal;
@@ -51,12 +56,14 @@ classdef logging < handle
     datefmt_ = 'yyyy-mm-dd HH:MM:SS,FFF';
     logLevel_ = logging.logging.INFO;
     commandWindowLevel_ = logging.logging.INFO;
+    logOrder_ = {'caller', 'timestamp', 'level', 'message'};
   end
   
   properties (Dependent)
     datefmt;
     logLevel;
     commandWindowLevel;
+    logOrder;
   end
 
   methods(Static)
@@ -99,33 +106,45 @@ classdef logging < handle
         tf = self.commandWindowLevel_ == self.OFF && self.logLevel_ == self.OFF;
     end
 
-    function trace(self, message)
-      [caller_name, ~] = self.getCallerInfo(self);
+    function trace(self, message, caller_name)
+      if nargin < 3 || isempty(caller_name)  
+        [caller_name, ~] = self.getCallerInfo(self);
+      end
       self.writeLog(self.TRACE, caller_name, message);
     end
 
-    function debug(self, message)
-      [caller_name, ~] = self.getCallerInfo(self);
+    function debug(self, message, caller_name)
+      if nargin < 3 || isempty(caller_name)  
+        [caller_name, ~] = self.getCallerInfo(self);
+      end
       self.writeLog(self.DEBUG, caller_name, message);
     end
 
-    function info(self, message)
-      [caller_name, ~] = self.getCallerInfo(self);
+    function info(self, message, caller_name)
+      if nargin < 3 || isempty(caller_name)  
+        [caller_name, ~] = self.getCallerInfo(self);
+      end
       self.writeLog(self.INFO, caller_name, message);
     end
 
-    function warn(self, message)
-      [caller_name, ~] = self.getCallerInfo(self);
+    function warn(self, message, caller_name)
+      if nargin < 3 || isempty(caller_name)  
+        [caller_name, ~] = self.getCallerInfo(self);
+      end
       self.writeLog(self.WARNING, caller_name, message);
     end
 
-    function error(self, message)
-      [caller_name, ~] = self.getCallerInfo(self);
+    function error(self, message, caller_name)
+      if nargin < 3 || isempty(caller_name)  
+        [caller_name, ~] = self.getCallerInfo(self);
+      end
       self.writeLog(self.ERROR, caller_name, message);
     end
 
-    function critical(self, message)
-      [caller_name, ~] = self.getCallerInfo(self);
+    function critical(self, message, caller_name)
+      if nargin < 3 || isempty(caller_name)  
+        [caller_name, ~] = self.getCallerInfo(self);
+      end
       self.writeLog(self.CRITICAL, caller_name, message);
     end
 
@@ -142,6 +161,7 @@ classdef logging < handle
       p.addParameter('logLevel', self.logLevel);
       p.addParameter('commandWindowLevel', self.commandWindowLevel);
       p.addParameter('datefmt', self.datefmt_);
+      p.addParameter('logOrder', self.logOrder_);
       p.parse(name, varargin{:});
       r = p.Results; 
       
@@ -170,8 +190,25 @@ classdef logging < handle
       if self.commandWindowLevel_ <= level || self.logLevel_ <= level
         timestamp = datestr(now, self.datefmt_);
         levelStr = logging.logging.levels(level);
-       
-        logline = sprintf(self.logfmt, caller, timestamp, levelStr, self.getMessage(message));
+        
+        supportedInputs = struct('caller',      caller, ...
+                                 'timestamp',   timestamp, ...
+                                 'level',       levelStr, ...
+                                 'message',     self.getMessage(message));
+        
+        order = self.logOrder;
+        inputs = cell(1, numel(order));
+        for iL = 1:numel(order)
+            if iL == 1
+                formatSpec = self.log_styles(order{iL});
+            else
+                formatSpec = [formatSpec, ' ', self.log_styles(order{iL})]; %#ok<AGROW>
+            end
+            inputs{iL} = supportedInputs.(order{iL});
+        end
+        formatSpec = [formatSpec, '\n'];
+%         logline = sprintf(self.logfmt, caller, timestamp, levelStr, self.getMessage(message));
+        logline = sprintf(formatSpec, inputs{:});
       end
 
       if self.commandWindowLevel_ <= level
@@ -219,6 +256,23 @@ classdef logging < handle
     
     function level = get.commandWindowLevel(self)
       level = self.commandWindowLevel_;
+    end
+    
+    function set.logOrder(self, order)
+      supportedOrders = self.log_styles.keys;
+      validateattributes(order, {'cell'}, {'nonempty', 'vector'}, ...
+          [class(self), '.set.logOrder'], 'order', 2)
+      cellfun(@(x) validateattributes(x, {'char'}, {'scalartext', 'nonempty'},  ...
+          [class(self), '.set.logOrder'], 'order', 2), order);
+      order = lower(order);
+      assert( all(ismember(order, supportedOrders)), [mfilename, ':invalidOrderKey'], ...
+          ['Invalid order key encountered, order must be a cell array with entries' , ...
+          ' corresponding to: ', strjoin(supportedOrders, ', ')]);
+      self.logOrder_ = order;
+    end
+    
+    function order = get.logOrder(self)
+      order = self.logOrder_;  
     end
         
         
