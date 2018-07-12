@@ -147,6 +147,15 @@ classdef logging < handle
       end
       self.writeLog(self.CRITICAL, caller_name, message);
     end
+    
+    function exception(self, ME)
+        validateattributes(ME, {'MException'}, {'scalar'}, [class(self), ...
+            '.exception'], 'ME', 2);
+        caller_name = ME.stack(1).name;
+        self.error(ME.message, caller_name);
+        self.debug(ME.identifier, caller_name);
+        self.trace(getReport(ME), caller_name);
+    end
 
     function self = logging(name, varargin)
       levelkeys = self.levels.keys;
