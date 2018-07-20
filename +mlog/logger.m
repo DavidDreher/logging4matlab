@@ -156,7 +156,7 @@ classdef logger < handle
         validateattributes(ME, {'MException'}, {'scalar'}, [class(self), ...
             '.exception'], 'ME', 2);
         if nargin < 3
-            flag = 'normal';
+            flag = 'error';
         end
         supportedFlags = {'error', 'critical'};
         flag = validatestring(flag, supportedFlags, [class(self), '.exception'], ...
