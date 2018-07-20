@@ -11,7 +11,7 @@ function [obj, deleteLogger] = getLogger(name, varargin)
     end
   end
   if ~logger_found
-    obj = logging.logging(name, varargin{:});
+    obj = mlog.logger(name, varargin{:});
     loggers = [loggers, obj];
   end
   

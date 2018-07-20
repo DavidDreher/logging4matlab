@@ -1,5 +1,5 @@
 function clearLogger(name)
-    [~, destructor] = logging.getLogger(name);
+    [~, destructor] = mlog.getLogger(name);
     destructor();
 end
 

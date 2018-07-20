@@ -1,4 +1,4 @@
-classdef logging < handle
+classdef logger < handle
   %LOGGING Simple logging framework.
   %
   % Author:
@@ -22,14 +22,14 @@ classdef logging < handle
        '\033[34m%s\033[0m', '\033[1;31m%s\033[0m'});
 
     level_colors = containers.Map(...
-      {logging.logging.INFO, logging.logging.ERROR, logging.logging.TRACE, ...
-       logging.logging.WARNING, logging.logging.DEBUG, logging.logging.CRITICAL}, ...
+      {mlog.logger.INFO, mlog.logger.ERROR, mlog.logger.TRACE, ...
+       mlog.logger.WARNING, mlog.logger.DEBUG, mlog.logger.CRITICAL}, ...
        {'normal', 'red', 'green', 'yellow', 'blue', 'brightred'});
 
     levels = containers.Map(...
-      {logging.logging.ALL,      logging.logging.TRACE,   logging.logging.DEBUG, ...
-       logging.logging.INFO,     logging.logging.WARNING, logging.logging.ERROR, ...
-       logging.logging.CRITICAL, logging.logging.OFF}, ...
+      {mlog.logger.ALL,      mlog.logger.TRACE,   mlog.logger.DEBUG, ...
+       mlog.logger.INFO,     mlog.logger.WARNING, mlog.logger.ERROR, ...
+       mlog.logger.CRITICAL, mlog.logger.OFF}, ...
       {'ALL', 'TRACE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'OFF'});
     
     log_styles = containers.Map(...
@@ -45,17 +45,17 @@ classdef logging < handle
 
   properties (SetAccess=protected)
     name;
-    fullpath = 'logging.log';  % Default log file
+    fullpath = '';  % Default log file
 %     logfmt = '%-s %-23s %-8s %s\n';
     logfid = -1;
-    logcolors = logging.logging.colors_terminal;
+    logcolors = mlog.logger.colors_terminal;
     using_terminal;
   end
 
   properties (Hidden,SetAccess=protected)
     datefmt_ = 'yyyy-mm-dd HH:MM:SS,FFF';
-    logLevel_ = logging.logging.INFO;
-    commandWindowLevel_ = logging.logging.INFO;
+    logLevel_ = mlog.logger.INFO;
+    commandWindowLevel_ = mlog.logger.INFO;
     logOrder_ = {'caller', 'timestamp', 'level', 'message'};
   end
   
@@ -84,13 +84,17 @@ classdef logging < handle
   methods
 
     function setFilename(self, logPath)
+      if isempty(logPath)
+        self.fullpath = logPath;
+        self.logfid = -1;
+        return
+      end
       [self.logfid, message] = fopen(logPath, 'a');
 
       if self.logfid < 0
-        warning(['Problem with supplied logfile path: ' message]);
-        self.logLevel_ = logging.logging.OFF;
+        warning([mfilename, ':setFilename:cannotOpenFile'], ...
+            ['Problem with supplied logfile path: ' message]);
       end
-
       self.fullpath = logPath;
     end
 
@@ -148,16 +152,41 @@ classdef logging < handle
       self.writeLog(self.CRITICAL, caller_name, message);
     end
     
-    function exception(self, ME)
+    function exception(self, ME, flag)
         validateattributes(ME, {'MException'}, {'scalar'}, [class(self), ...
             '.exception'], 'ME', 2);
+        if nargin < 3
+            flag = 'normal';
+        end
+        supportedFlags = {'error', 'critical'};
+        flag = validatestring(flag, supportedFlags, [class(self), '.exception'], ...
+            'flag', 3);
         caller_name = ME.stack(1).name;
-        self.error(ME.message, caller_name);
+        if strcmp(flag, 'error')
+            self.error(ME.message, caller_name);
+        else
+            self.critical(ME.message, caller_name);
+        end
         self.debug(ME.identifier, caller_name);
         self.trace(getReport(ME), caller_name);
     end
+    
+    function warning(self, msgID, msg, caller_name)
+        narginchk(2,4)
+       if nargin < 4
+           [caller_name, ~] = self.getCallerInfo(self);
+       end
+       if nargin < 3
+           msg = msgID;
+           msgID = '';
+       end
+       self.warn(msg, caller_name);
+       if ~isempty(msgID)
+           self.debug(msgID, caller_name);
+       end
+    end
 
-    function self = logging(name, varargin)
+    function self = logger(name, varargin)
       levelkeys = self.levels.keys;
       self.level_numbers = containers.Map(...
           self.levels.values, levelkeys);
@@ -166,7 +195,7 @@ classdef logging < handle
       
       p = inputParser();
       p.addRequired('name', @ischar);
-      p.addParameter('path', '', @ischar);
+      p.addParameter('path', self.fullpath, @ischar);
       p.addParameter('logLevel', self.logLevel);
       p.addParameter('commandWindowLevel', self.commandWindowLevel);
       p.addParameter('datefmt', self.datefmt_);
@@ -177,12 +206,10 @@ classdef logging < handle
       self.name = r.name;
       self.commandWindowLevel = r.commandWindowLevel;
       self.datefmt = r.datefmt;
-      if ~isempty(r.path)
-        self.setFilename(r.path);  % Opens the log file.
-        self.logLevel = r.logLevel;
-      else
-        self.logLevel_ = logging.logging.OFF;
-      end
+      self.logOrder = r.logOrder;
+      self.setFilename(r.path);
+      self.logLevel = r.logLevel;
+      
       % Use terminal logging if swing is disabled in matlab environment.
       swingError = javachk('swing');
       self.using_terminal = (~ isempty(swingError) && strcmp(swingError.identifier, 'MATLAB:javachk:thisFeatureNotAvailable')) || ~desktop('-inuse');
@@ -198,7 +225,7 @@ classdef logging < handle
       level = self.getLevelNumber(level);
       if self.commandWindowLevel_ <= level || self.logLevel_ <= level
         timestamp = datestr(now, self.datefmt_);
-        levelStr = logging.logging.levels(level);
+        levelStr = mlog.logger.levels(level);
         
         supportedInputs = struct('caller',      caller, ...
                                  'timestamp',   timestamp, ...
@@ -224,7 +251,7 @@ classdef logging < handle
         if self.using_terminal
           level_color = self.level_colors(level);
         else
-          level_color = self.level_colors(logging.logging.INFO);
+          level_color = self.level_colors(mlog.logger.INFO);
         end
         fprintf(self.logcolors(level_color), logline);
       end
@@ -248,9 +275,13 @@ classdef logging < handle
     end
     
     function set.logLevel(self, level)
-      level = self.getLevelNumber(level);
-      if level > logging.logging.OFF || level < logging.logging.ALL
-        error('invalid logging level');
+      if isnumeric(level)
+        validateattributes(level, {'numeric'}, {'nonnegative','integer', ...
+          'scalar', '>=', mlog.logger.ALL, '<=', mlog.logger.OFF}, ...
+          [mfilename, ':logLevel'], 'level', 2);
+        level = cast(level, class(self.logLevel));
+      else
+        level = self.getLevelNumber(level);
       end
       self.logLevel_ = level;
     end
@@ -301,7 +332,7 @@ classdef logging < handle
       if isinteger(level) && self.level_range(1) <= level && level <= self.level_range(2)
         return
       else
-        level = self.level_numbers(level);
+        level = self.level_numbers(upper(level));
       end
     end
       
@@ -311,7 +342,7 @@ classdef logging < handle
         message = message();
       end
       [rows, ~] = size(message);
-      if rows > 1
+      if rows > 1 || ~(ischar(message) || isstring(message))
         message = sprintf('\n %s', evalc('disp(message)'));
       end
     end
