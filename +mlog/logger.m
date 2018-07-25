@@ -5,6 +5,7 @@ classdef logger < handle
   %     Dominique Orban <dominique.orban@gmail.com>
   % Heavily modified version of 'log4m': http://goo.gl/qDUcvZ
   %
+  % Modified by David Dreher
 
   properties (Constant)
     ALL      = int8(0);
@@ -50,6 +51,7 @@ classdef logger < handle
     logfid = -1;
     logcolors = mlog.logger.colors_terminal;
     using_terminal;
+    logbuffer = '';
   end
 
   properties (Hidden,SetAccess=protected)
@@ -258,6 +260,9 @@ classdef logger < handle
 
       if self.logLevel_ <= level && self.logfid > -1
         fprintf(self.logfid, logline);
+      end
+      if self.logLevel_ <= level
+          self.logbuffer = [self.logbuffer, logline];
       end
     end        
     
