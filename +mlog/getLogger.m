@@ -2,13 +2,12 @@ function [obj, deleteLogger] = getLogger(name, varargin)
   persistent loggers;
   logger_found = false;
   if ~isempty(loggers)
-    for logger = loggers
-      if strcmp(logger.name, name)
-        obj = logger;
-        logger_found = true;
-        break;
+      loggerNames = {loggers.name};
+      loggerIdx = strcmp(loggerNames, name);
+      if any(loggerIdx)
+          obj = loggers(loggerIdx);
+          logger_found = true;
       end
-    end
   end
   if ~logger_found
     obj = mlog.logger(name, varargin{:});
